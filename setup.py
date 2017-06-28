@@ -10,6 +10,7 @@ roles = set()
 operators = set()
 items = set()
 ctus = set()
+skillranks = set()
 
 def main():
     db = sqlite3.connect('data/data.sqlite3');
@@ -45,12 +46,16 @@ def create_tables(db):
     # Items
     c.execute('CREATE TABLE item (item_id INT PRIMARY KEY, name TEXT)')
 
+    # Ranks
+    c.execute('CREATE TABLE skillrank (skillrank_id INT PRIMARY KEY, name TEXT)')
+
     # Statistics
     c.execute('''CREATE TABLE stat_objective (
-              stat_id INT PRIMARY KEY, platform_id INT, date TEXT, objective_id INT, operator_id INT, wins INT, kills INT, deaths INT, picks INT,
+              stat_id INT PRIMARY KEY, platform_id INT, date TEXT, objective_id INT, operator_id INT, wins INT, kills INT, deaths INT, picks INT, skillrank_id INT,
               FOREIGN KEY (platform_id) REFERENCES platform(platform_id),
               FOREIGN KEY (objective_id) REFERENCES objective(objective_id),
-              FOREIGN KEY (operator_id) REFERENCES operator(operator_id)
+              FOREIGN KEY (operator_id) REFERENCES operator(operator_id),
+              FOREIGN KEY (skillrank_id) REFERENCES skillrank(skillrank_id)
               )''')
     c.execute('''CREATE TABLE stat_loadout (
               stat_id INT PRIMARY KEY, platform_id INT, date TEXT, operator_id INT, primaryweapon_id INT, sidearm_id INT, gadget_id INT, wins INT, kills INT, deaths INT, picks INT,
@@ -100,6 +105,10 @@ def collect_objectives(db):
                 add_operator(db, operator, role)
             ctu, operator = operator.split('-')
 
+            skillrank = row[cols['skillrank']]
+            if skillrank not in skillranks:
+                add_skillrank(db, skillrank)
+
             dateid = row[cols['dateid']]
             date = '{}-{}-{}'.format(dateid[0:4], dateid[4:6], dateid[6:8])
 
@@ -108,9 +117,9 @@ def collect_objectives(db):
             deaths = row[cols['nbdeaths']]
             picks = row[cols['nbpicks']]
 
-            values = (stat_id, date, wins, kills, deaths, picks, platform, objective_location, mapname, gamemode, operator, ctu)
+            values = (stat_id, date, wins, kills, deaths, picks, platform, objective_location, mapname, gamemode, operator, ctu, skillrank)
             sql = '''
-            INSERT INTO stat_objective (stat_id, date, wins, kills, deaths, picks, platform_id, objective_id, operator_id)
+            INSERT INTO stat_objective (stat_id, date, wins, kills, deaths, picks, platform_id, objective_id, operator_id, skillrank_id)
             SELECT
                 ? AS stat_id,
                 ? AS date,
@@ -141,7 +150,13 @@ def collect_objectives(db):
                     JOIN ctu c ON c.ctu_id = o.ctu_id
                     WHERE o.name = ?
                       AND c.name = ?
-                ) AS operator_id
+                ) AS operator_id,
+                (
+                    SELECT
+                        s.skillrank_id
+                    FROM skillrank s
+                    WHERE s.name = ?
+                ) AS skillrank_id
             '''
             c.execute(sql, values)
             stat_id += 1
@@ -200,6 +215,11 @@ def add_ctu(db, name):
     c = db.cursor()
     c.execute('INSERT INTO ctu (ctu_id, name) VALUES (?, ?)', (len(ctus) + 1, name))
     ctus.add(name)
+
+def add_skillrank(db, name):
+    c = db.cursor()
+    c.execute('INSERT INTO skillrank (skillrank_id, name) VALUES (?, ?)', (len(skillranks) + 1, name))
+    skillranks.add(name)
 
 def get_col_ids(row):
     ids = {}
