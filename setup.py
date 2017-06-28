@@ -2,6 +2,7 @@
 import sqlite3
 import csv
 
+# These sets track which pieces of information are already in the database
 platforms = set()
 maps = set()
 gamemodes = set()
@@ -85,9 +86,12 @@ def collect_objectives(db):
 
     with open('data/objectives.csv', newline='', encoding='latin-1') as csvfile:
         reader = csv.reader(csvfile, delimiter=';')
+
+        # Get the first line and get an index for every column name
         header = next(reader)
         cols = get_col_ids(header)
-        stat_id = 1
+
+        stat_id = 1 # Primary key in the stat table
         for row in reader:
             platform = row[cols['platform']]
             if platform not in platforms:
@@ -171,6 +175,9 @@ def collect_objectives(db):
             c.execute(sql, values)
             stat_id += 1
 
+# The add_* functions insert a single piece of data in its corresponding table.
+# It then adds it to the set so that it appears only once.
+
 def add_platform(db, name):
     c = db.cursor()
     c.execute('INSERT INTO platform (platform_id, name) VALUES (?, ?)', (len(platforms) + 1, name))
@@ -231,6 +238,9 @@ def add_skillrank(db, name):
     c.execute('INSERT INTO skillrank (skillrank_id, name) VALUES (?, ?)', (len(skillranks) + 1, name))
     skillranks.add(name)
 
+# Returns a dict with column names as indexes and numeric indexes as values.
+# Here is an example:
+# { 'platform': 0, 'dateid': 1, ... }
 def get_col_ids(row):
     ids = {}
     i = 0
