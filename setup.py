@@ -13,6 +13,8 @@ items = set()
 ctus = set()
 skillranks = set()
 
+import_type = 'objectives'
+
 def main():
     db = sqlite3.connect('data/data.sqlite3');
     create_tables(db)
@@ -79,12 +81,12 @@ def create_tables(db):
     db.commit()
 
 def collect_values(db):
-    collect_objectives(db)
+    collect_from_file(db, 'data/objectives.csv')
 
-def collect_objectives(db):
+def collect_from_file(db, filename):
     c = db.cursor()
 
-    with open('data/objectives.csv', newline='', encoding='latin-1') as csvfile:
+    with open(filename, newline='', encoding='latin-1') as csvfile:
         reader = csv.reader(csvfile, delimiter=';')
 
         # Get the first line and get an index for every column name
@@ -92,151 +94,143 @@ def collect_objectives(db):
         cols = get_col_ids(header)
 
         stat_id = 1 # Primary key in the stat table
-        for row in reader:
-            platform = row[cols['platform']]
-            if platform not in platforms:
-                add_platform(db, platform)
+        for arr in reader:
+            row = get_row_dict(arr, cols)
 
-            gamemode = row[cols['gamemode']]
-            if gamemode not in gamemodes:
-                add_gamemode(db, gamemode)
+            if import_type == 'objectives':
+                collect_objective_data(db, row, stat_id)
 
-            mapname = row[cols['mapname']]
-            if mapname not in maps:
-                add_map(db, mapname)
-
-            objective_location = row[cols['objectivelocation']]
-            objective = '{};{};{}'.format(mapname, gamemode, objective_location)
-            if objective not in objectives:
-                add_objective(db, objective_location, mapname, gamemode)
-
-            role = row[cols['role']]
-            if role not in roles:
-                add_role(db, role)
-
-            operator = row[cols['operator']]
-            if operator not in operators:
-                add_operator(db, operator, role)
-            ctu, operator = operator.split('-')
-
-            skillrank = row[cols['skillrank']]
-            if skillrank not in skillranks:
-                add_skillrank(db, skillrank)
-
-            dateid = row[cols['dateid']]
-            date = '{}-{}-{}'.format(dateid[0:4], dateid[4:6], dateid[6:8])
-
-            wins = row[cols['nbwins']]
-            kills = row[cols['nbkills']]
-            deaths = row[cols['nbdeaths']]
-            picks = row[cols['nbpicks']]
-
-            values = (stat_id, date, wins, kills, deaths, picks, platform, objective_location, mapname, gamemode, operator, ctu, skillrank)
-            sql = '''
-            INSERT INTO stat_objective (stat_id, date, wins, kills, deaths, picks, platform_id, objective_id, operator_id, skillrank_id)
-            SELECT
-                ? AS stat_id,
-                ? AS date,
-                ? AS wins,
-                ? AS kills,
-                ? AS deaths,
-                ? AS picks,
-                (
-                    SELECT
-                        p.platform_id
-                    FROM platform p
-                    WHERE p.name = ?
-                ) AS platform_id,
-                (
-                    SELECT
-                        o.objective_id
-                    FROM objective o
-                    JOIN map m ON m.map_id = o.map_id
-                    JOIN gamemode gm ON gm.gamemode_id = o.gamemode_id
-                    WHERE o.name = ?
-                      AND m.name = ?
-                      AND gm.name = ?
-                ) AS objective_id,
-                (
-                    SELECT
-                        o.operator_id
-                    FROM operator o
-                    JOIN ctu c ON c.ctu_id = o.ctu_id
-                    WHERE o.name = ?
-                      AND c.name = ?
-                ) AS operator_id,
-                (
-                    SELECT
-                        s.skillrank_id
-                    FROM skillrank s
-                    WHERE s.name = ?
-                ) AS skillrank_id
-            '''
-            c.execute(sql, values)
             stat_id += 1
+
+def collect_objective_data(db, row, stat_id):
+    c = db.cursor()
+
+    add_platform(db, row['platform'])
+    add_gamemode(db, row['gamemode'])
+    add_map(db, row['mapname'])
+    add_role(db, row['role'])
+    add_ctu(db, row['ctu'])
+    add_operator(db, row['operator'], row['ctu'], row['role'])
+    add_skillrank(db, row['skillrank'])
+    add_objective(db, row['objectivelocation'], row['mapname'], row['gamemode'])
+
+    values = (stat_id, row['date'], row['nbwins'], row['nbkills'], row['nbdeaths'], row['nbpicks'], row['platform'], row['objectivelocation'], row['mapname'], row['gamemode'], row['operator'], row['ctu'], row['skillrank'])
+    sql = '''
+    INSERT INTO stat_objective (stat_id, date, wins, kills, deaths, picks, platform_id, objective_id, operator_id, skillrank_id)
+    SELECT
+        ? AS stat_id,
+        ? AS date,
+        ? AS wins,
+        ? AS kills,
+        ? AS deaths,
+        ? AS picks,
+        (
+            SELECT
+                p.platform_id
+            FROM platform p
+            WHERE p.name = ?
+        ) AS platform_id,
+        (
+            SELECT
+                o.objective_id
+            FROM objective o
+            JOIN map m ON m.map_id = o.map_id
+            JOIN gamemode gm ON gm.gamemode_id = o.gamemode_id
+            WHERE o.name = ?
+              AND m.name = ?
+              AND gm.name = ?
+        ) AS objective_id,
+        (
+            SELECT
+                o.operator_id
+            FROM operator o
+            JOIN ctu c ON c.ctu_id = o.ctu_id
+            WHERE o.name = ?
+              AND c.name = ?
+        ) AS operator_id,
+        (
+            SELECT
+                s.skillrank_id
+            FROM skillrank s
+            WHERE s.name = ?
+        ) AS skillrank_id
+    '''
+    c.execute(sql, values)
 
 # The add_* functions insert a single piece of data in its corresponding table.
 # It then adds it to the set so that it appears only once.
 
-def add_platform(db, name):
-    c = db.cursor()
-    c.execute('INSERT INTO platform (platform_id, name) VALUES (?, ?)', (len(platforms) + 1, name))
-    platforms.add(name)
+def add_platform(db, platform):
+    if platform not in platforms:
+        c = db.cursor()
+        c.execute('INSERT INTO platform (platform_id, name) VALUES (?, ?)', (len(platforms) + 1, platform))
+        platforms.add(platform)
 
-def add_gamemode(db, name):
-    c = db.cursor()
-    c.execute('INSERT INTO gamemode (gamemode_id, name) VALUES (?, ?)', (len(gamemodes) + 1, name))
-    gamemodes.add(name)
+def add_gamemode(db, gamemode):
+    if gamemode not in gamemodes:
+        c = db.cursor()
+        c.execute('INSERT INTO gamemode (gamemode_id, name) VALUES (?, ?)', (len(gamemodes) + 1, gamemode))
+        gamemodes.add(gamemode)
 
-def add_map(db, name):
-    c = db.cursor()
-    c.execute('INSERT INTO map (map_id, name) VALUES (?, ?)', (len(maps) + 1, name))
-    maps.add(name)
+def add_map(db, mapname):
+    if mapname not in maps:
+        c = db.cursor()
+        c.execute('INSERT INTO map (map_id, name) VALUES (?, ?)', (len(maps) + 1, mapname))
+        maps.add(mapname)
 
-def add_objective(db, objective, mapname, gamemode):
-    c = db.cursor()
-    values = (len(objectives) + 1, objective, mapname, gamemode)
-    c.execute('''INSERT INTO objective (objective_id, map_id, gamemode_id, name)
-              SELECT
+def add_objective(db, objectivelocation, mapname, gamemode):
+    s = '{};{};{}'.format(objectivelocation, mapname, gamemode)
+
+    if s not in objectives:
+        c = db.cursor()
+        values = (len(objectives) + 1, objectivelocation, mapname, gamemode)
+        c.execute('''
+        INSERT INTO objective (objective_id, map_id, gamemode_id, name)
+            SELECT
                 ? AS objective_id,
                 m.map_id AS map_id,
                 gm.gamemode_id AS gamemode_id,
                 ? AS name
-              FROM map m, gamemode gm
-              WHERE m.name = ? AND gm.name = ?''', values)
-    objectives.add('{};{};{}'.format(mapname, gamemode, objective))
+            FROM map m, gamemode gm
+            WHERE m.name = ? AND gm.name = ?
+        ''', values)
+        objectives.add(s)
 
-def add_role(db, name):
-    c = db.cursor()
-    c.execute('INSERT INTO role (role_id, name) VALUES (?, ?)', (len(roles) + 1, name))
-    roles.add(name)
+def add_role(db, role):
+    if role not in roles:
+        c = db.cursor()
+        c.execute('INSERT INTO role (role_id, name) VALUES (?, ?)', (len(roles) + 1, role))
+        roles.add(role)
 
-def add_operator(db, operator, role):
-    c = db.cursor()
-    ctu, name = operator.split('-')
-    if ctu not in ctus:
-        add_ctu(db, ctu)
+def add_operator(db, operator, ctu, role):
+    s = '{};{};{}'.format(operator, ctu, role)
 
-    values = (len(operators) + 1, name, ctu, role)
-    c.execute('''INSERT INTO operator (operator_id, name, ctu_id, role_id)
+    if s not in operators:
+        c = db.cursor()
+        values = (len(operators) + 1, operator, ctu, role)
+        c.execute('''
+        INSERT INTO operator (operator_id, name, ctu_id, role_id)
               SELECT
                 ? AS operator_id,
                 ? AS name,
                 c.ctu_id AS ctu_id,
                 r.role_id AS role_id
-              FROM ctu c, role r
-              WHERE c.name = ? AND r.name = ?''', values)
-    operators.add(operator)
+            FROM ctu c, role r
+            WHERE c.name = ? AND r.name = ?
+        ''', values)
+        operators.add(s)
 
-def add_ctu(db, name):
-    c = db.cursor()
-    c.execute('INSERT INTO ctu (ctu_id, name) VALUES (?, ?)', (len(ctus) + 1, name))
-    ctus.add(name)
+def add_ctu(db, ctu):
+    if ctu not in ctus:
+        c = db.cursor()
+        c.execute('INSERT INTO ctu (ctu_id, name) VALUES (?, ?)', (len(ctus) + 1, ctu))
+        ctus.add(ctu)
 
-def add_skillrank(db, name):
-    c = db.cursor()
-    c.execute('INSERT INTO skillrank (skillrank_id, name) VALUES (?, ?)', (len(skillranks) + 1, name))
-    skillranks.add(name)
+def add_skillrank(db, skillrank):
+    if skillrank not in skillranks:
+        c = db.cursor()
+        c.execute('INSERT INTO skillrank (skillrank_id, name) VALUES (?, ?)', (len(skillranks) + 1, skillrank))
+        skillranks.add(skillrank)
 
 # Returns a dict with column names as indexes and numeric indexes as values.
 # Here is an example:
@@ -249,6 +243,22 @@ def get_col_ids(row):
         i += 1
 
     return ids
+
+# Returns a dict with column names as indexes and the CSV values as values
+# Here is an example:
+# { 'platform': 'PC', 'dateid': '20170510', ... }
+def get_row_dict(arr, cols):
+    row = {}
+    for key in cols:
+        row[key] = arr[cols[key]]
+
+    if 'operator' in row:
+        row['ctu'], row['operator'] = row['operator'].split('-')
+
+    if 'dateid' in row:
+        row['date'] = '{}-{}-{}'.format(row['dateid'][0:4], row['dateid'][4:6], row['dateid'][6:8])
+
+    return row
 
 if __name__ == '__main__':
     main()
