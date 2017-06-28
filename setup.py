@@ -65,6 +65,16 @@ def create_tables(db):
               FOREIGN KEY (sidearm_id) REFERENCES item(item_id),
               FOREIGN KEY (gadget_id) REFERENCES item(item_id)
               )''')
+
+    # Indexes
+    c.execute('CREATE INDEX idx_platform_name ON platform(name)')
+    c.execute('CREATE INDEX idx_ctu_name ON ctu(name)')
+    c.execute('CREATE INDEX idx_role_name ON role(name)')
+    c.execute('CREATE INDEX idx_map_name ON map(name)')
+    c.execute('CREATE INDEX idx_gamemode_name ON gamemode(name)')
+    c.execute('CREATE INDEX idx_objective_name ON objective(name)')
+    c.execute('CREATE INDEX idx_skillrank_name ON skillrank(name)')
+
     db.commit()
 
 def collect_values(db):
