@@ -8,15 +8,12 @@ I did not include the data in this repository. In order to use this program, you
 [Downloads](https://rainbow6.ubisoft.com/siege/en-us/news/152-293696-16/introduction-to-the-data-peek-velvet-shell-statistics)
 
 ## Usage
-Download the objectives data file, place it in a directory called _data/_ and rename it to _objectives.csv_. Then run _setup.py_.
+Download the objectives data file, extract it and place it somewhere in your filesystem. Then run _setup.py_
 
-After a few minutes it should exit without any errors and there should be a file in _data/_ called _data.sqlite3_.
+After a few minutes it should exit without any errors and there should be a new file called _something.sqlite_.
 
 ```
-$ python3 setup.py
+$ python3 setup.py data/datadump_S5.csv
 $ ls data/
-data.sqlite3  objectives.csv
+datadump_S5.sqlite  datadump_S5.csv
 ```
-
-## What about the other files?
-This project is currently work-in-progress.
