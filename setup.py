@@ -11,7 +11,6 @@ gamemodes = set()
 objectives = set()
 roles = set()
 operators = set()
-items = set()
 ctus = set()
 skillranks = set()
 matches = set()
@@ -25,8 +24,6 @@ grip_attachments = set()
 underbarrel_attachments = set()
 barrel_attachments = set()
 gadgets = set()
-
-import_type = 'huge'
 
 def main():
     # Parse command line arguments
@@ -78,9 +75,6 @@ def create_tables(db):
               FOREIGN KEY (map_id) REFERENCES map(map_id),
               FOREIGN KEY (gamemode_id) REFERENCES gamemode(gamemode_id)
               )''')
-
-    # Items
-    c.execute('CREATE TABLE item (item_id INT PRIMARY KEY, name TEXT)')
 
     # Ranks
     c.execute('CREATE TABLE skillrank (skillrank_id INT PRIMARY KEY, name TEXT)')
@@ -173,21 +167,6 @@ def create_tables(db):
     ''')
 
     # Statistics
-    c.execute('''CREATE TABLE stat_objective (
-              stat_id INT PRIMARY KEY, platform_id INT, date TEXT, objective_id INT, operator_id INT, wins INT, kills INT, deaths INT, picks INT, skillrank_id INT,
-              FOREIGN KEY (platform_id) REFERENCES platform(platform_id),
-              FOREIGN KEY (objective_id) REFERENCES objective(objective_id),
-              FOREIGN KEY (operator_id) REFERENCES operator(operator_id),
-              FOREIGN KEY (skillrank_id) REFERENCES skillrank(skillrank_id)
-              )''')
-    c.execute('''CREATE TABLE stat_loadout (
-              stat_id INT PRIMARY KEY, platform_id INT, date TEXT, operator_id INT, primaryweapon_id INT, sidearm_id INT, gadget_id INT, wins INT, kills INT, deaths INT, picks INT,
-              FOREIGN KEY (platform_id) REFERENCES platform(platform_id),
-              FOREIGN KEY (operator_id) REFERENCES operator(operator_id),
-              FOREIGN KEY (primaryweapon_id) REFERENCES item(item_id),
-              FOREIGN KEY (sidearm_id) REFERENCES item(item_id),
-              FOREIGN KEY (gadget_id) REFERENCES item(item_id)
-              )''')
 
     # Indexes
     c.execute('CREATE INDEX idx_platform_name ON platform(name)')
@@ -220,70 +199,10 @@ def collect_from_file(db, filename):
         stat_id = 1 # Primary key in the stat table
         for arr in reader:
             row = get_row_dict(arr, cols)
-
-            if import_type == 'objectives':
-                collect_objective_data(db, row, stat_id)
-            elif import_type == 'huge':
-                collect_huge_data(db, row, stat_id)
-
+            collect_from_row(db, row, stat_id)
             stat_id += 1
 
-def collect_objective_data(db, row, stat_id):
-    c = db.cursor()
-
-    add_platform(db, row['platform'])
-    add_gamemode(db, row['gamemode'])
-    add_map(db, row['mapname'])
-    add_role(db, row['role'])
-    add_ctu(db, row['ctu'])
-    add_operator(db, row['operator'], row['ctu'], row['role'])
-    add_skillrank(db, row['skillrank'])
-    add_objective(db, row['objectivelocation'], row['mapname'], row['gamemode'])
-
-    values = (stat_id, row['date'], row['nbwins'], row['nbkills'], row['nbdeaths'], row['nbpicks'], row['platform'], row['objectivelocation'], row['mapname'], row['gamemode'], row['operator'], row['ctu'], row['skillrank'])
-    sql = '''
-    INSERT INTO stat_objective (stat_id, date, wins, kills, deaths, picks, platform_id, objective_id, operator_id, skillrank_id)
-    SELECT
-        ? AS stat_id,
-        ? AS date,
-        ? AS wins,
-        ? AS kills,
-        ? AS deaths,
-        ? AS picks,
-        (
-            SELECT
-                p.platform_id
-            FROM platform p
-            WHERE p.name = ?
-        ) AS platform_id,
-        (
-            SELECT
-                o.objective_id
-            FROM objective o
-            JOIN map m ON m.map_id = o.map_id
-            JOIN gamemode gm ON gm.gamemode_id = o.gamemode_id
-            WHERE o.name = ?
-              AND m.name = ?
-              AND gm.name = ?
-        ) AS objective_id,
-        (
-            SELECT
-                o.operator_id
-            FROM operator o
-            JOIN ctu c ON c.ctu_id = o.ctu_id
-            WHERE o.name = ?
-              AND c.name = ?
-        ) AS operator_id,
-        (
-            SELECT
-                s.skillrank_id
-            FROM skillrank s
-            WHERE s.name = ?
-        ) AS skillrank_id
-    '''
-    c.execute(sql, values)
-
-def collect_huge_data(db, row, stat_id):
+def collect_from_row(db, row, stat_id):
     add_platform(db, row['platform'])
     add_gamemode(db, row['gamemode'])
     add_map(db, row['mapname'])
@@ -309,7 +228,6 @@ def collect_huge_data(db, row, stat_id):
     add_attachment_underbarrel(db, row['secondaryunderbarrel'])
     add_attachment_barrel(db, row['secondarybarrel'])
     add_gadget(db, row['secondarygadget'])
-    pass
 
 # The add_* functions insert a single piece of data in its corresponding table.
 # It then adds it to the set so that it appears only once.
