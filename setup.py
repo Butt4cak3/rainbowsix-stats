@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 import sqlite3
 import csv
+import argparse
+import os
 
 # These sets track which pieces of information are already in the database
 platforms = set()
@@ -27,9 +29,29 @@ gadgets = set()
 import_type = 'huge'
 
 def main():
-    db = sqlite3.connect('data/data.sqlite3');
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Import a CSV file into an SQLite3 database')
+    parser.add_argument('filename', metavar='FILENAME', type=str, help='A CSV file provided by Ubisoft')
+    parser.add_argument('-o', dest='output', metavar='OUTFILE', help='The name of the SQLite3 db file')
+    parser.add_argument('-f', '--force', dest='force', action='store_const', const=True, default=False, help='Overwrite an existing database file')
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.filename):
+        print('File not found: "{}"'.format(args.filename))
+        return
+
+    if args.output is None:
+        args.output = os.path.splitext(args.filename)[0] + '.sqlite'
+
+    if os.path.isfile(args.output) and args.force == False:
+        print('"{}" already exists. Use -f to overwrite.'.format(args.output))
+        return
+    elif os.path.isfile(args.output) and args.force == True:
+        os.remove(args.output)
+
+    db = sqlite3.connect(args.output);
     create_tables(db)
-    collect_values(db)
+    collect_values(db, args.filename)
     db.commit()
     db.close()
 
@@ -182,8 +204,8 @@ def create_tables(db):
 
     db.commit()
 
-def collect_values(db):
-    collect_from_file(db, 'data/huge.csv')
+def collect_values(db, filename):
+    collect_from_file(db, filename)
 
 def collect_from_file(db, filename):
     c = db.cursor()
