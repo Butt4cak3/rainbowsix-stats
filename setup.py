@@ -12,8 +12,19 @@ operators = set()
 items = set()
 ctus = set()
 skillranks = set()
+matches = set()
+rounds = set()
+endroundreasons = set()
+weapontypes = set()
+weapons = set()
+attachments = set()
+sight_attachments = set()
+grip_attachments = set()
+underbarrel_attachments = set()
+barrel_attachments = set()
+gadgets = set()
 
-import_type = 'objectives'
+import_type = 'huge'
 
 def main():
     db = sqlite3.connect('data/data.sqlite3');
@@ -52,6 +63,93 @@ def create_tables(db):
     # Ranks
     c.execute('CREATE TABLE skillrank (skillrank_id INT PRIMARY KEY, name TEXT)')
 
+    # Matches and rounds
+    c.execute('''
+    CREATE TABLE match (
+        match_id INT PRIMARY KEY,
+        map_id INT,
+        gamemode_id INT,
+        date TEXT,
+        FOREIGN KEY (map_id) REFERENCES map(map_id),
+        FOREIGN KEY (gamemode_id) REFERENCES gamemode(gamemode_id)
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE endroundreason (
+        endroundreason_id INT PRIMARY KEY,
+        name TEXT
+    )
+    ''')
+
+    c.execute('''
+    CREATE TABLE round (
+        round_id INT PRIMARY KEY,
+        round_num INT,
+        match_id INT,
+        objective_id INT,
+        winrole_id INT,
+        endroundreason_id INT,
+        duration INT,
+        FOREIGN KEY (match_id) REFERENCES match(match_id),
+        FOREIGN KEY (objective_id) REFERENCES objective(objective_id),
+        FOREIGN KEY (winrole_id) REFERENCES role(role_id),
+        FOREIGN KEY (endroundreason_id) REFERENCES endroundreason(endroundreason_id)
+    )
+    ''')
+
+    # Weapons and items
+    c.execute('''
+    CREATE TABLE weapontype (
+        weapontype_id INT PRIMARY KEY,
+        name TEXT
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE weapon (
+        weapon_id INT PRIMARY KEY,
+        weapontype_id INT,
+        name TEXT,
+        FOREIGN KEY (weapontype_id) REFERENCES weapontype(weapontype_id)
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE attachment (
+        attachment_id INT PRIMARY KEY,
+        name TEXT
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE attachment_sight (
+        attachment_id INT PRIMARY KEY,
+        FOREIGN KEY (attachment_id) REFERENCES attachment(attachment_id)
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE attachment_grip (
+        attachment_id INT PRIMARY KEY,
+        FOREIGN KEY (attachment_id) REFERENCES attachment(attachment_id)
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE attachment_underbarrel (
+        attachment_id INT PRIMARY KEY,
+        FOREIGN KEY (attachment_id) REFERENCES attachment(attachment_id)
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE attachment_barrel (
+        attachment_id INT PRIMARY KEY,
+        FOREIGN KEY (attachment_id) REFERENCES attachment(attachment_id)
+    )
+    ''')
+    c.execute('''
+    CREATE TABLE gadget (
+        gadget_id INT PRIMARY KEY,
+        name TEXT
+    )
+    ''')
+
     # Statistics
     c.execute('''CREATE TABLE stat_objective (
               stat_id INT PRIMARY KEY, platform_id INT, date TEXT, objective_id INT, operator_id INT, wins INT, kills INT, deaths INT, picks INT, skillrank_id INT,
@@ -77,11 +175,15 @@ def create_tables(db):
     c.execute('CREATE INDEX idx_gamemode_name ON gamemode(name)')
     c.execute('CREATE INDEX idx_objective_name ON objective(name)')
     c.execute('CREATE INDEX idx_skillrank_name ON skillrank(name)')
+    c.execute('CREATE INDEX idx_weapontype_name ON weapontype(name)')
+    c.execute('CREATE INDEX idx_weapon_name ON weapon(name)')
+    c.execute('CREATE INDEX idx_attachment_name ON attachment(name)')
+    c.execute('CREATE INDEX idx_gadget_name ON gadget(name)')
 
     db.commit()
 
 def collect_values(db):
-    collect_from_file(db, 'data/objectives.csv')
+    collect_from_file(db, 'data/huge.csv')
 
 def collect_from_file(db, filename):
     c = db.cursor()
@@ -99,6 +201,8 @@ def collect_from_file(db, filename):
 
             if import_type == 'objectives':
                 collect_objective_data(db, row, stat_id)
+            elif import_type == 'huge':
+                collect_huge_data(db, row, stat_id)
 
             stat_id += 1
 
@@ -156,6 +260,34 @@ def collect_objective_data(db, row, stat_id):
         ) AS skillrank_id
     '''
     c.execute(sql, values)
+
+def collect_huge_data(db, row, stat_id):
+    add_platform(db, row['platform'])
+    add_gamemode(db, row['gamemode'])
+    add_map(db, row['mapname'])
+    add_objective(db, row['objectivelocation'], row['mapname'], row['gamemode'])
+    add_match(db, row['matchid'], row['date'], row['mapname'], row['gamemode'])
+    add_endroundreason(db, row['endroundreason'])
+    add_role(db, row['winrole'])
+    add_round(db, row['roundnumber'], row['matchid'], row['objectivelocation'], row['mapname'], row['gamemode'], row['winrole'], row['endroundreason'], row['roundduration'])
+    add_skillrank(db, row['skillrank'])
+    add_role(db, row['role'])
+    add_ctu(db, row['ctu'])
+    add_operator(db, row['operator'], row['ctu'], row['role'])
+    add_weapontype(db, row['primaryweapontype'])
+    add_weapon(db, row['primaryweapon'], row['primaryweapontype'])
+    add_attachment_sight(db, row['primarysight'])
+    add_attachment_grip(db, row['primarygrip'])
+    add_attachment_underbarrel(db, row['primaryunderbarrel'])
+    add_attachment_barrel(db, row['primarybarrel'])
+    add_weapontype(db, row['secondaryweapontype'])
+    add_weapon(db, row['secondaryweapon'], row['secondaryweapontype'])
+    add_attachment_sight(db, row['secondarysight'])
+    add_attachment_grip(db, row['secondarygrip'])
+    add_attachment_underbarrel(db, row['secondaryunderbarrel'])
+    add_attachment_barrel(db, row['secondarybarrel'])
+    add_gadget(db, row['secondarygadget'])
+    pass
 
 # The add_* functions insert a single piece of data in its corresponding table.
 # It then adds it to the set so that it appears only once.
@@ -231,6 +363,174 @@ def add_skillrank(db, skillrank):
         c = db.cursor()
         c.execute('INSERT INTO skillrank (skillrank_id, name) VALUES (?, ?)', (len(skillranks) + 1, skillrank))
         skillranks.add(skillrank)
+
+def add_weapontype(db, weapontype):
+    if weapontype not in weapontypes:
+        c = db.cursor()
+        c.execute('INSERT INTO weapontype (weapontype_id, name) VALUES (?, ?)', (len(weapontypes) + 1, weapontype))
+        weapontypes.add(weapontype)
+
+def add_weapon(db, weapon, weapontype):
+    if weapon not in weapons:
+        c = db.cursor()
+        values = (len(weapons) + 1, weapon, weapontype)
+        c.execute('''
+        INSERT INTO weapon (weapon_id, name, weapontype_id)
+            SELECT
+                ? AS weapon_id,
+                ? AS name,
+                t.weapontype_id AS weapontype_id
+            FROM weapontype t
+            WHERE t.name = ?
+        ''', values)
+        weapons.add(weapon)
+
+def add_attachment(db, attachment):
+    if attachment == 'None':
+        return
+
+    if attachment not in attachments:
+        c = db.cursor()
+        c.execute('INSERT INTO attachment (attachment_id, name) VALUES (?, ?)', (len(attachments) + 1, attachment))
+        attachments.add(attachment)
+
+def add_attachment_sight(db, attachment):
+    if attachment == 'None':
+        return
+
+    if attachment not in sight_attachments:
+        add_attachment(db, attachment)
+        c = db.cursor()
+        c.execute('''
+        INSERT INTO attachment_sight (attachment_id)
+            SELECT
+                a.attachment_id
+            FROM attachment a
+            WHERE a.name = ?
+        ''', (attachment,))
+        sight_attachments.add(attachment)
+
+def add_attachment_grip(db, attachment):
+    if attachment == 'None':
+        return
+
+    if attachment not in grip_attachments:
+        add_attachment(db, attachment)
+        c = db.cursor()
+        c.execute('''
+        INSERT INTO attachment_grip (attachment_id)
+            SELECT
+                a.attachment_id
+            FROM attachment a
+            WHERE a.name = ?
+        ''', (attachment,))
+        grip_attachments.add(attachment)
+
+def add_attachment_underbarrel(db, attachment):
+    if attachment == 'None':
+        return
+
+    if attachment not in underbarrel_attachments:
+        add_attachment(db, attachment)
+        c = db.cursor()
+        c.execute('''
+        INSERT INTO attachment_underbarrel (attachment_id)
+            SELECT
+                a.attachment_id
+            FROM attachment a
+            WHERE a.name = ?
+        ''', (attachment,))
+        underbarrel_attachments.add(attachment)
+
+def add_attachment_barrel(db, attachment):
+    if attachment == 'None':
+        return
+
+    if attachment not in barrel_attachments:
+        add_attachment(db, attachment)
+        c = db.cursor()
+        c.execute('''
+        INSERT INTO attachment_barrel (attachment_id)
+            SELECT
+                a.attachment_id
+            FROM attachment a
+            WHERE a.name = ?
+        ''', (attachment,))
+        barrel_attachments.add(attachment)
+
+def add_gadget(db, gadget):
+    if gadget not in gadgets:
+        c = db.cursor()
+        c.execute('INSERT INTO gadget (gadget_id, name) VALUES (?, ?)', (len(gadgets) + 1, gadget))
+        gadgets.add(gadget)
+
+def add_match(db, matchid, date, mapname, gamemode):
+    if matchid not in matches:
+        c = db.cursor()
+        values = (matchid, date, mapname, gamemode)
+        c.execute('''
+        INSERT INTO match (match_id, date, map_id, gamemode_id)
+            SELECT
+                ? AS match_id,
+                ? AS date,
+                (
+                    SELECT
+                        m.map_id AS map_id
+                    FROM map m
+                    WHERE m.name = ?
+                ) AS map_id,
+                (
+                    SELECT
+                        gm.gamemode_id AS gamemode_id
+                    FROM gamemode gm
+                    WHERE gm.name = ?
+                ) AS gamemode_id
+        ''', values)
+        matches.add(matchid)
+
+def add_round(db, round_num, matchid, objective, mapname, gamemode, winrole, endroundreason, duration):
+    s = '{};{}'.format(matchid, round_num)
+
+    if s not in rounds:
+        c = db.cursor()
+        values = (len(rounds) + 1, round_num, matchid, duration, mapname, gamemode, objective, winrole, endroundreason)
+        c.execute('''
+        INSERT INTO round (round_id, round_num, match_id, duration, objective_id, winrole_id, endroundreason_id)
+            SELECT
+                ? AS round_id,
+                ? AS round_num,
+                ? AS match_id,
+                ? AS duration,
+                (
+                    SELECT
+                        o.objective_id
+                    FROM objective o
+                    JOIN map m ON m.map_id = o.map_id
+                    JOIN gamemode gm ON gm.gamemode_id = o.gamemode_id
+                    WHERE m.name = ?
+                      AND gm.name = ?
+                      AND o.name = ?
+                ) AS objective_id,
+                (
+                    SELECT
+                        r.role_id
+                    FROM role r
+                    WHERE r.name = ?
+                ) AS winrole_id,
+                (
+                    SELECT
+                        r.endroundreason_id
+                    FROM endroundreason r
+                    WHERE r.name = ?
+                ) AS endroundreason_id
+        ''', values)
+        rounds.add(s)
+
+def add_endroundreason(db, endroundreason):
+    if endroundreason not in endroundreasons:
+        c = db.cursor()
+        c.execute('INSERT INTO endroundreason (endroundreason_id, name) VALUES (?, ?)', (len(endroundreasons) + 1, endroundreason))
+        endroundreasons.add(endroundreason)
 
 # Returns a dict with column names as indexes and numeric indexes as values.
 # Here is an example:
